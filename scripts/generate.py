@@ -76,7 +76,7 @@ class LoopUpscaler:
         geninfo, _ = read_info_from_image(Image.open(filepath))
         geninfo = parse_generation_parameters(geninfo)
 
-        print(f'geninfo: {geninfo}')
+        # print(f'geninfo: {geninfo}')
 
         args = {
             "prompt": geninfo["Prompt"],  # 提示词
@@ -135,7 +135,7 @@ class LoopUpscaler:
         self.iter_images = None
         self.images_list = []
         shared.state.interrupt()
-        return 0, 0, 0
+        return "stopped", 0, 0
 
     def iterImages(self):
         for filepath in self.images_list:
@@ -176,20 +176,20 @@ class LoopUpscaler:
 
         print(f'loop_start: {id_task}  {self.process_count}  {self.process_curr} {time.time()}')
 
-        if self.process_count == 0:
-            print("所有任务执行完成")
-            return self.outputs_info + [self.id_task, self.process_count, 0]
-
-        if self.process_count == -1:
+        if id_task == "waitStart":
             print("等待任务开始")
-            return self.outputs_info + [self.id_task, self.process_count, 0]
+            return self.outputs_info + [id_task, self.process_count, 0]
+
+        if id_task == "stopping":
+            print("结束任务！")
+            return self.outputs_info + ["stopped", self.process_count, 0]
 
         self.id_task = id_task
 
         filepath = self.get_next_image()
         if not filepath:
             print("任务已完成。")
-            self.id_task = "0"
+            self.id_task = "stopping"
             self.process_count = 0
             return self.outputs_info + [self.id_task, self.process_count, 0]
 
@@ -200,7 +200,7 @@ class LoopUpscaler:
         self.up(filepath)
         # self.fake_up()
 
-        print(f'return: {self.outputs_info + [self.id_task, self.process_count, self.process_curr]}')
+        # print(f'return: {self.outputs_info + [self.id_task, self.process_count, self.process_curr]}')
         return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
 
     def first_start(self, id_task, input_folder, output_floder, select_upscaler, select_upscaler_visibility,
@@ -210,24 +210,29 @@ class LoopUpscaler:
             return id_task.replace("repetitive", ""), self.process_count, self.process_curr
 
         if not input_folder:
-            input_folder = r"G:\sd\sd-webui-aki-v4.2\outputs\t\input"
+            input_folder = r"E:\NovelAI\outputs\ls\au\input"
         if not output_floder:
-            output_floder = r"G:\sd\sd-webui-aki-v4.2\outputs\t\output"
+            output_floder = r"E:\NovelAI\outputs\ls\au\ouput"
 
-        self.id_task = id_task
+        self.images_list = []
+        self.id_task = "starting"
         self.select_upscaler = select_upscaler
         self.select_upscaler_visibility = select_upscaler_visibility
         self.redraw_amplitude = redraw_amplitude
 
         self.validate_images_in_folder(input_folder, output_floder)
 
-        if len(self.images_list) > 0:
+        self.process_curr = 0
+        self.process_count = len(self.images_list)
+
+        if self.process_count > 0:
             self.flag = True
             self.iter_images = self.iterImages()
+        else:
+            self.id_task = "stopping"
 
-        # 返回待处理的总数量
-
-        return id_task, len(self.images_list), 0
+        print(f'first_start return: {self.id_task, self.process_count, self.process_curr}')
+        return self.id_task, self.process_count, self.process_curr
 
     # def run(self, id_task, input_folder, output_floder):
     #     self.validate_images_in_folder(input_folder, output_floder)

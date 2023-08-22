@@ -1,4 +1,3 @@
-
 import gradio as gr
 from modules import shared
 
@@ -12,20 +11,18 @@ from scripts.generate import LoopUpscaler
 
 folder_symbol = '\U0001f4c2'  # 📂
 
-
 import modules.shared as shared
 
 
 # add more UI components (cf. https://gradio.app/docs/#components)
 def on_ui_tabs():
-
     self_type = "auto_upscaler"
 
     def bind_func(
-        submit, interrupt
+            submit, interrupt
     ):
         l = LoopUpscaler()
-        
+
         submit.click(
             fn=l.first_start,
             _js="au_before_starting",
@@ -74,12 +71,12 @@ def on_ui_tabs():
             ],
         )
 
-
     def create_output_panel(tabname):
 
         with gr.Column(variant='panel', elem_id=f"{tabname}_results"):
             with gr.Group(elem_id=f"{tabname}_gallery_container"):
-                result_gallery = gr.Gallery(label='Output', show_label=False, elem_id=f"{tabname}_gallery").style(columns=4)
+                result_gallery = gr.Gallery(label='Output', show_label=False, elem_id=f"{tabname}_gallery").style(
+                    columns=4)
 
             generation_info = None
             with gr.Column():
@@ -100,7 +97,8 @@ def on_ui_tabs():
 
                         generation_info = gr.Textbox(visible=False, elem_id=f'generation_info_{tabname}')
                         if tabname == 'txt2img' or tabname == 'img2img':
-                            generation_info_button = gr.Button(visible=False, elem_id=f"{tabname}_generation_info_button")
+                            generation_info_button = gr.Button(visible=False,
+                                                               elem_id=f"{tabname}_generation_info_button")
 
                 else:
                     html_info_x = gr.HTML(elem_id=f'html_info_x_{tabname}')
@@ -108,13 +106,15 @@ def on_ui_tabs():
                     html_log = gr.HTML(elem_id=f'html_log_{tabname}')
 
                 return result_gallery, generation_info if tabname != "extras" else html_info_x, html_info, html_log
-    
+
     with gr.Blocks(analytics_enabled=False) as ui_component:
 
-        id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="0")
-        
-        process_count = gr.Number(visible=True, elem_id=f"{self_type}_process_count", show_label=False, info="总任务数", value=0)
-        process_curr = gr.Number(visible=True, elem_id=f"{self_type}_process_curr", show_label=False, info="当前任务", value=0)
+        id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="")
+
+        process_count = gr.Number(visible=True, elem_id=f"{self_type}_process_count", show_label=False, info="总任务数",
+                                  value=0)
+        process_curr = gr.Number(visible=True, elem_id=f"{self_type}_process_curr", show_label=False, info="当前任务",
+                                 value=0)
 
         with gr.Row():
             input_floder = gr.Textbox(
@@ -130,10 +130,12 @@ def on_ui_tabs():
         with gr.Row():
             with FormRow():
                 select_upscaler = gr.Dropdown(
-                    label='放大算法', elem_id="select_upscaler", choices=[x.name for x in shared.sd_upscalers], value=shared.sd_upscalers[0].name
+                    label='放大算法', elem_id="select_upscaler", choices=[x.name for x in shared.sd_upscalers],
+                    value=shared.sd_upscalers[0].name
                 )
                 select_upscaler_visibility = gr.Slider(
-                    minimum=1.0, maximum=4.0, step=0.1, label="放大倍数", value=1.5, elem_id="select_upscaler_visibility")
+                    minimum=1.0, maximum=4.0, step=0.1, label="放大倍数", value=1.5,
+                    elem_id="select_upscaler_visibility")
                 redraw_amplitude = gr.Slider(
                     minimum=0.0, maximum=1.0, step=0.01, label="重绘幅度", value=0.35, elem_id="redraw_amplitude")
 
@@ -148,15 +150,15 @@ def on_ui_tabs():
                     value="终止", variant='secondary', elem_id=f"{self_type}_end_btn", label='end_btn', visible=True
                 )
                 process_btn = gr.Button(
-                    value="处理", variant='secondary', elem_id=f"{self_type}_process_btn", label='process_btn', visible=True
+                    value="处理", variant='secondary', elem_id=f"{self_type}_process_btn", label='process_btn',
+                    visible=True
                 )
-                
+
         bind_func(start_btn, end_btn)
 
         return [(ui_component, "自动高清修复", "auto_upscaler_tab")]
-    
+
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
-
 
 # 执行过程中，把待升级的文件删掉了，要每次检测是否存在，提示与跳过
