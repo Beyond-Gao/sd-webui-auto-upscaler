@@ -34,9 +34,100 @@ class LoopUpscaler:
         self.iter_images = None
         self.images_list = []
 
+    def up(self, filepath):
+
+        geninfo, _ = read_info_from_image(Image.open(filepath))
+        geninfo = parse_generation_parameters(geninfo)
+
+        print(f'geninfo: {geninfo}')
+
+        args = {
+            "prompt": geninfo["Prompt"],  # 提示词
+            "negative_prompt": geninfo["Negative prompt"],  # 负面提示词
+            "steps": int(geninfo["Steps"]),  # 步数
+            "sampler_name": geninfo["Sampler"],  # 采样方法名称
+            "cfg_scale": float(geninfo["CFG scale"]),  # 提示词引导系数
+            "seed": int(geninfo["Seed"]),  # 随机数种子
+            "width": int(geninfo["Size-1"]),
+            "height": int(geninfo["Size-2"]),
+            # "denoising_strength": float(geninfo["Denoising strength"]),  # 重绘幅度？
+        }
+
+        args["enable_hr"] = True  # 是否开启放大
+        args["hr_scale"] = self.select_upscaler_visibility  # 放大倍数
+        args["hr_upscaler"] = self.select_upscaler  # 放大算法方法名
+        args["denoising_strength"] = self.redraw_amplitude  # 重绘幅度
+        args["hr_resize_x"] = 0  # 将宽度调整为
+        args["hr_resize_y"] = 0  # 将高度调整为
+
+        progress.add_task_to_queue(self.id_task)
+        with queue_lock:
+            progress.start_task(self.id_task)
+
+            try:
+                with closing(StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)) as p:
+                    p.scripts = scripts_txt2img
+                    p.outpath_samples = self.output_floder
+                    p.outpath_grids = opts.outdir_txt2img_grids
+
+                    shared.state.begin(job=self.id_task)
+                    p.script_args = ()
+                    processed = process_images(p)
+                    progress.record_results(self.id_task, processed)
+
+            finally:
+                progress.finish_task(self.id_task)
+                shared.state.end()
+                shared.total_tqdm.clear()
+
+        generation_info_js = processed.js()
+        self.outputs_info = [
+            processed.images,
+            generation_info_js,
+            plaintext_to_html(processed.info),
+            plaintext_to_html(processed.comments, classname="comments"),
+        ]
+
+    def fake_up(self):
+
+        progress.add_task_to_queue(self.id_task)
+        with queue_lock:
+            progress.start_task(self.id_task)
+            shared.state.begin(job=self.id_task)
+
+            time.sleep(3.5)
+            progress.finish_task(self.id_task)
+            shared.state.end()
+            shared.total_tqdm.clear()
+
+        self.outputs_info = [None, "", "", ""]
+
+    def interrupt(self):
+        print("click: interrupt")
+        self.flag = False
+        self.process_curr = 0
+        self.process_count = 0
+        # self.id_task = None
+        self.iter_images = None
+        self.images_list = []
+        shared.state.interrupt()
+        return "Stopped", self.process_count, self.process_curr
+
+    def iterImages(self):
+        for filepath in self.images_list:
+            if not self.flag:
+                return
+            yield filepath
+
+    def get_next_image(self):
+        try:
+            return next(self.iter_images)
+        except StopIteration:
+            return None
+
     def validate_image_type(self, filename):
-        suffix = filename.split(".")[-1]
-        if suffix not in ["jpg", "jpeg", "png"]:
+        ext = filename.split(".")[-1]
+        if ext not in ["jpg", "jpeg", "png"]:
             return False
         return True
 
@@ -71,151 +162,20 @@ class LoopUpscaler:
             print("未找到有效的图片")
             return 0
 
-    def up(self, filepath):
-
-        geninfo, _ = read_info_from_image(Image.open(filepath))
-        geninfo = parse_generation_parameters(geninfo)
-
-        # print(f'geninfo: {geninfo}')
-
-        args = {
-            "prompt": geninfo["Prompt"],  # 提示词
-            "negative_prompt": geninfo["Negative prompt"],  # 负面提示词
-            "steps": int(geninfo["Steps"]),  # 步数
-            "sampler_name": geninfo["Sampler"],  # 采样方法名称
-            "cfg_scale": float(geninfo["CFG scale"]),  # 提示词引导系数
-            "seed": int(geninfo["Seed"]),  # 随机数种子
-            "width": int(geninfo["Size-1"]),
-            "height": int(geninfo["Size-2"]),
-            # "denoising_strength": float(geninfo["Denoising strength"]),  # 重绘幅度？
-        }
-
-        args["enable_hr"] = True  # 是否开启放大
-        args["hr_scale"] = self.select_upscaler_visibility  # 放大倍数
-        args["hr_upscaler"] = self.select_upscaler  # 放大算法方法名
-        args["denoising_strength"] = self.redraw_amplitude  # 重绘幅度
-        args["hr_resize_x"] = 0  # 将宽度调整为
-        args["hr_resize_y"] = 0  # 将高度调整为
-
-        progress.add_task_to_queue(self.id_task)
-
-        with queue_lock:
-            progress.start_task(self.id_task)
-
-            try:
-                with closing(StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)) as p:
-                    p.scripts = scripts_txt2img
-                    p.outpath_samples = self.output_floder
-                    p.outpath_grids = opts.outdir_txt2img_grids
-
-                    shared.state.begin(job=self.id_task)
-                    p.script_args = ()  # 脚本的args
-                    processed = process_images(p)
-                    progress.record_results(self.id_task, processed)
-
-            finally:
-                progress.finish_task(self.id_task)
-                shared.state.end()
-                shared.total_tqdm.clear()
-
-        generation_info_js = processed.js()
-        self.outputs_info = [
-            processed.images,
-            generation_info_js,
-            plaintext_to_html(processed.info),
-            plaintext_to_html(processed.comments, classname="comments"),
-        ]
-
-    def interrupt(self):
-        print("click: interrupt")
-        self.flag = False
-        self.process_curr = 0
-        self.process_count = 0
-        # self.id_task = None
-        self.iter_images = None
-        self.images_list = []
-        shared.state.interrupt()
-        return "stopped", 0, 0
-
-    def iterImages(self):
-        for filepath in self.images_list:
-            if not self.flag:
-                return
-            yield filepath
-
-    def get_next_image(self):
-        try:
-            return next(self.iter_images)
-        except StopIteration:
-            return None
-
-    def fake_up(self):
-
-        progress.add_task_to_queue(self.id_task)
-
-        with queue_lock:
-            progress.start_task(self.id_task)
-            shared.state.begin(job=self.id_task)
-
-            time.sleep(3.5)
-            progress.finish_task(self.id_task)
-            shared.state.end()
-            shared.total_tqdm.clear()
-
-        self.outputs_info = [
-            None,
-            "",
-            "",
-            "",
-        ]
-
-    def loop_start(self, id_task, process_count, process_curr):
-
-        self.process_count = int(process_count)
-        self.process_curr = int(process_curr)
-
-        print(f'loop_start: {id_task}  {self.process_count}  {self.process_curr} {time.time()}')
-
-        if id_task == "waitStart":
-            print("等待任务开始")
-            return self.outputs_info + [id_task, self.process_count, 0]
-
-        if id_task == "stopping":
-            print("结束任务！")
-            return self.outputs_info + ["stopped", self.process_count, 0]
-
-        self.id_task = id_task
-
-        filepath = self.get_next_image()
-        if not filepath:
-            print("任务已完成。")
-            self.id_task = "stopping"
-            self.process_count = 0
-            return self.outputs_info + [self.id_task, self.process_count, 0]
-
-        if not os.path.exists(filepath):
-            return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
-
-        print(f"({self.process_curr}/{self.process_count})开始处理图片...{filepath}")
-        self.up(filepath)
-        # self.fake_up()
-
-        # print(f'return: {self.outputs_info + [self.id_task, self.process_count, self.process_curr]}')
-        return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
-
-    def first_start(self, id_task, input_folder, output_floder, select_upscaler, select_upscaler_visibility,
-                    redraw_amplitude):
+    def first_start(
+            self, id_task, input_folder, output_floder, select_upscaler, select_upscaler_visibility, redraw_amplitude
+    ):
 
         if "repetitive" in id_task:
             return id_task.replace("repetitive", ""), self.process_count, self.process_curr
 
         if not input_folder:
-            input_folder = r"E:\NovelAI\outputs\ls\au\input"
+            input_folder = r"G:\sd\sd-webui-aki-v4.2\outputs\t\input"
         if not output_floder:
-            output_floder = r"E:\NovelAI\outputs\ls\au\ouput"
+            output_floder = r"G:\sd\sd-webui-aki-v4.2\outputs\t\output"
 
         self.images_list = []
-        self.id_task = "starting"
+        self.id_task = "Starting"
         self.select_upscaler = select_upscaler
         self.select_upscaler_visibility = select_upscaler_visibility
         self.redraw_amplitude = redraw_amplitude
@@ -229,16 +189,40 @@ class LoopUpscaler:
             self.flag = True
             self.iter_images = self.iterImages()
         else:
-            self.id_task = "stopping"
+            self.id_task = "Stopping"
 
         print(f'first_start return: {self.id_task, self.process_count, self.process_curr}')
         return self.id_task, self.process_count, self.process_curr
 
-    # def run(self, id_task, input_folder, output_floder):
-    #     self.validate_images_in_folder(input_folder, output_floder)
+    def loop_start(self, id_task, process_count, process_curr):
 
-    #     # self.loop_start()
+        self.process_count = int(process_count)
+        self.process_curr = int(process_curr)
 
-    #     # 返回待处理的总数量
-    #     return id_task, len(self.images_list)
+        print(f'loop_start: {id_task}  {self.process_count}  {self.process_curr} {time.time()}')
 
+        if id_task == "WaitStart":
+            print("等待任务开始")
+            return self.outputs_info + [id_task, self.process_count, 0]
+
+        if id_task == "Stopping":
+            print("结束任务！")
+            return self.outputs_info + ["Stopped", self.process_count, 0]
+
+        self.id_task = id_task
+        filepath = self.get_next_image()
+        if not filepath:
+            print("任务已完成。")
+            self.id_task = "Stopping"
+            self.process_count = 0
+            return self.outputs_info + [self.id_task, self.process_count, 0]
+
+        if not os.path.exists(filepath):
+            return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
+
+        print(f"({self.process_curr}/{self.process_count})开始处理图片...{filepath}")
+        self.up(filepath)
+        # self.fake_up()
+
+        # print(f'return: {self.outputs_info + [self.id_task, self.process_count, self.process_curr]}')
+        return self.outputs_info + [self.id_task, self.process_count, self.process_curr]

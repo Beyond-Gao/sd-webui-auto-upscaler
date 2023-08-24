@@ -1,89 +1,93 @@
-function au_before_starting() {
 
+function auFirstStart() {
+
+    var idTaskEle = getEleIdTask();
+    var showInfo = getEleShowInfoP();
     var res = create_submit_args(arguments);
-    console.log("first res " + res)
 
-    var idTaskEle = get_ele_id_task();
+    if (idTaskEle.value == "" || idTaskEle.value == "Stopped") {
 
-    if (idTaskEle.value == "" || idTaskEle.value == "stopped") {
-
-    } else if (idTaskEle.value != "waitStart" || idTaskEle.value != "stopping") {
+    } else if (idTaskEle.value != "WaitStart" || idTaskEle.value != "Stopping") {
         console.log("重复任务！")
         res[0] = "repetitive" + idTaskEle.value;
         return res;
     }
 
-    // var processCountEle = get_ele_process_count();
-    // processCountEle.value = -1;
-    idTaskEle.value = "waitStart"
+    setStartBtnHidden();
+    setInterruptBtnVisible();
+
+    idTaskEle.value = "WaitStart"
+    showInfo.textContent = "Waiting for start...";
     res[0] = idTaskEle.value;
 
-    var process_btn = get_ele_process_btn();
+    var process_btn = getEleProcessBtn();
     clickBtn(process_btn);
 
     return res;
 }
 
-function au_up() {
+function auLoopStart() {
 
-    var idTaskEle = get_ele_id_task();
-    var processCountEle = get_ele_process_count();
-    var processCurrEle = get_ele_process_curr();
+    var idTaskEle = getEleIdTask();
+    var showInfo = getEleShowInfoP();
+    var processCurrEle = getEleProcessCurr();
+    var processCountEle = getEleProcessCount();
     var res = create_submit_args(arguments);
-    console.log("res: " + res)
 
-    // console.log("res[1]:" + res[1] + "  value:" + processCountEle.value)
     res[1] = processCountEle.value;
 
-    if (idTaskEle.value == "waitStart") {
+    if (idTaskEle.value == "WaitStart") {
         res[0] = idTaskEle.value;
-        console.log("任务状态为" + idTaskEle.value + ", 即将重启任务");
-        var process_btn = get_ele_process_btn();
+        var process_btn = getEleProcessBtn();
         clickBtn(process_btn);
         return res;
-    }
 
-    if (idTaskEle.value == "stopping") {
-        // idTaskEle.value = "stopping";
+    } else if (idTaskEle.value == "Stopping") {
         res[0] = idTaskEle.value;
-        console.log("任务状态为" + idTaskEle.value + ", 即将停止任务");
+        if (showInfo.textContent != "All Complete.") {
+            showInfo.textContent = "Stopped."
+        }
         return res;
-    }
 
-    if (idTaskEle.value == "stopped") {
-        // idTaskEle.value = "stopping";
-        res[0] = "stopping";
-        console.log("任务状态为" + idTaskEle.value + ", 已停止。");
+    } else if (idTaskEle.value == "Stopped") {
+        res[0] = "Stopping";
+        if (showInfo.textContent != "All Complete.") {
+            showInfo.textContent = "Stopped."
+        }
         return res;
     }
 
     var id = randomId();
-    res[0] = id;
 
+    res[0] = id;
     res[2] += 1;
-    state = get_state_ele();
-    state.textContent = "(" + res[2] + "/" + res[1] + ") " + "Processing...";
     processCurrEle.value = res[2].toString();
+    showInfo.textContent = "(" + res[2] + "/" + res[1] + ") " + "Processing...";
 
     requestProgress(res[0], gradioApp().getElementById('auto_upscaler_gallery_container'), gradioApp().getElementById('auto_upscaler_gallery'), function() {
-        // gradioApp().getElementById("auto_upscaler_start_btn").style.display = "block";
-        // gradioApp().getElementById("auto_upscaler_end_btn").style.display = "none";
 
-        var idTaskEle = get_ele_id_task();
-        var processCountEle = get_ele_process_count();
-        var processCurrEle = get_ele_process_curr();
+        var idTaskEle = getEleIdTask();
+        var showInfo = getEleShowInfoP();
+        var processCurrEle = getEleProcessCurr();
+        var processCountEle = getEleProcessCount();
 
-        state = get_state_ele();
-        state.textContent = "(" + res[2] + "/" + res[1] + ") " + "Complete.";
+        showInfo.textContent = "(" + res[2] + "/" + res[1] + ") " + "Complete.";
 
-        if (idTaskEle.value == "stopping" || idTaskEle.value == "stopped" || parseInt(processCurrEle.value) >= parseInt(processCountEle.value)) {
-            state.textContent = "All Complete.";
-            var interrupt_btn = gradioApp().getElementById('auto_upscaler_end_btn');
-            interrupt_btn.click();
+        if (idTaskEle.value == "Stopping" || idTaskEle.value == "Stopped" || parseInt(processCurrEle.value) >= parseInt(processCountEle.value)) {
+
+            if (showInfo.textContent != "Stopping...") {
+                showInfo.textContent = "All Complete.";
+            }
+
+            setStartBtnVisible();
+            setInterruptBtnHidden();
+
+            var interruptBtn = gradioApp().getElementById('auto_upscaler_end_btn');
+            interruptBtn.click();
 
         } else {
-            var process_btn = get_ele_process_btn();
-            clickBtn(process_btn);
+            var processBtn = getEleProcessBtn();
+            clickBtn(processBtn);
         }
 
     });
@@ -92,81 +96,72 @@ function au_up() {
 
 }
 
-function auto_upscaler() {
+function auInterrupt() {
 
-    state = get_state_ele();
-    state.textContent = "processing...";
-    // gradioApp().getElementById("auto_upscaler_start_btn").style.display = "none";
-    // gradioApp().getElementById("auto_upscaler_end_btn").style.display = "block";
-
-    var id = randomId();
-    // var id = "auto_upscaler_task_id_value";
-    localStorage.setItem("auto_upscaler_task_id", id);
-
-    requestProgress(id, gradioApp().getElementById('auto_upscaler_gallery_container'), gradioApp().getElementById('auto_upscaler_gallery'), function() {
-        // gradioApp().getElementById("auto_upscaler_start_btn").style.display = "block";
-        // gradioApp().getElementById("auto_upscaler_end_btn").style.display = "none";
-        state = get_state_ele();
-        state.textContent = "finished.";
-        localStorage.removeItem("auto_upscaler_task_id");
-    });
-
+    var idTaskEle = getEleIdTask();
+    var showInfo = getEleShowInfoP();
     var res = create_submit_args(arguments);
 
-    console.log(res)
+    idTaskEle.value = "Stopping"
 
-    res[0] = id;
-
-    return res;
-}
-
-function show_end_info() {
-
-    state = get_state_ele();
-    var idTaskEle = get_ele_id_task();
-    idTaskEle.value = "stopping"
-    
-    var res = create_submit_args(arguments);
-    state.textContent = "stopping..." + res[0];
-
-    return res;
-}
-
-function get_state_ele() {
-
-    state = gradioApp().getElementById('auto_upscaler_state');
-
-    if (!state) {
-        box_div = gradioApp().getElementById('auto_upscaler_console');
-        var state = document.createElement("p");
-        state.setAttribute("id", "auto_upscaler_state");
-        state.style.fontSize = "36px"; // 设置字体大小，这里设置为24像素
-        box_div.appendChild(state);
+    if (showInfo.textContent != "All Complete.") {
+        showInfo.textContent = "Stopping...";
     }
 
-    return state;
+    return res;
 }
 
-function get_ele_process_count() {
-    return document.querySelector('#auto_upscaler_process_count input');
+function getEleShowInfoP() {
+
+    p = gradioApp().getElementById('auto_upscaler_show_info_p');
+
+    if (!p) {
+        box_div = gradioApp().getElementById('auto_upscaler_console');
+        var p = document.createElement("p");
+        p.setAttribute("id", "auto_upscaler_show_info_p");
+        p.style.fontSize = "36px";
+        box_div.appendChild(p);
+    }
+
+    return p;
 }
 
-function get_ele_process_curr() {
-    return document.querySelector('#auto_upscaler_process_curr input');
+function getEleIdTask() {
+    return document.querySelector('#auto_upscaler_id_task textarea');
 }
 
-function get_ele_process_btn() {
+function getEleProcessBtn() {
     return gradioApp().getElementById('auto_upscaler_process_btn');
 }
 
-function get_ele_id_task() {
-    return document.querySelector('#auto_upscaler_id_task textarea');
+function getEleProcessCurr() {
+    return document.querySelector('#auto_upscaler_process_curr input');
+}
+
+function getEleProcessCount() {
+    return document.querySelector('#auto_upscaler_process_count input');
 }
 
 function clickBtn(process_btn) {
     setTimeout(function() {
         process_btn.click();
     }, 3000);
+}
+
+function setStartBtnHidden() {
+    gradioApp().getElementById("auto_upscaler_start_btn").style.display = "none";
+}
+
+function setStartBtnVisible() {
+    gradioApp().getElementById("auto_upscaler_start_btn").style.display = "block";
+}
+
+function setInterruptBtnHidden() {
+    gradioApp().getElementById("auto_upscaler_end_btn").style.display = "none";
+}
+
+function setInterruptBtnVisible() {
+    gradioApp().getElementById("auto_upscaler_end_btn").style.display = "block";
 }
 
 

@@ -1,17 +1,12 @@
 import gradio as gr
-from modules import shared
 
+from modules import shared
 from modules import script_callbacks
 from modules.ui_components import FormRow
-from modules import shared
-from modules import shared
-
 from scripts.au_util import AuUtils
 from scripts.generate import LoopUpscaler
 
 folder_symbol = '\U0001f4c2'  # 📂
-
-import modules.shared as shared
 
 
 # add more UI components (cf. https://gradio.app/docs/#components)
@@ -25,7 +20,7 @@ def on_ui_tabs():
 
         submit.click(
             fn=l.first_start,
-            _js="au_before_starting",
+            _js="auFirstStart",
             inputs=[
                 id_task,
                 input_floder,
@@ -43,7 +38,7 @@ def on_ui_tabs():
 
         process_btn.click(
             fn=l.loop_start,
-            _js="au_up",
+            _js="auLoopStart",
             inputs=[
                 id_task,
                 process_count,
@@ -62,7 +57,7 @@ def on_ui_tabs():
 
         interrupt.click(
             fn=l.interrupt,
-            _js="show_end_info",
+            _js="auInterrupt",
             inputs=[],
             outputs=[
                 id_task,
@@ -96,9 +91,9 @@ def on_ui_tabs():
                         html_log = gr.HTML(elem_id=f'html_log_{tabname}', elem_classes="html-log")
 
                         generation_info = gr.Textbox(visible=False, elem_id=f'generation_info_{tabname}')
-                        if tabname == 'txt2img' or tabname == 'img2img':
-                            generation_info_button = gr.Button(visible=False,
-                                                               elem_id=f"{tabname}_generation_info_button")
+                        # if tabname == 'txt2img' or tabname == 'img2img':
+                        #     generation_info_button = gr.Button(visible=False,
+                        #                                        elem_id=f"{tabname}_generation_info_button")
 
                 else:
                     html_info_x = gr.HTML(elem_id=f'html_info_x_{tabname}')
@@ -109,12 +104,14 @@ def on_ui_tabs():
 
     with gr.Blocks(analytics_enabled=False) as ui_component:
 
-        id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="")
-
-        process_count = gr.Number(visible=True, elem_id=f"{self_type}_process_count", show_label=False, info="总任务数",
-                                  value=0)
-        process_curr = gr.Number(visible=True, elem_id=f"{self_type}_process_curr", show_label=False, info="当前任务",
-                                 value=0)
+        with gr.Row(visible=False):
+            id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="")
+            process_count = gr.Number(
+                visible=True, elem_id=f"{self_type}_process_count", show_label=False, info="总任务数", value=0
+            )
+            process_curr = gr.Number(
+                visible=True, elem_id=f"{self_type}_process_curr", show_label=False, info="当前任务", value=0
+            )
 
         with gr.Row():
             input_floder = gr.Textbox(
@@ -134,10 +131,12 @@ def on_ui_tabs():
                     value=shared.sd_upscalers[0].name
                 )
                 select_upscaler_visibility = gr.Slider(
-                    minimum=1.0, maximum=4.0, step=0.1, label="放大倍数", value=1.5,
-                    elem_id="select_upscaler_visibility")
+                    minimum=1.0, maximum=4.0, step=0.5, label="放大倍数", value=1.5,
+                    elem_id="select_upscaler_visibility"
+                )
                 redraw_amplitude = gr.Slider(
-                    minimum=0.0, maximum=1.0, step=0.01, label="重绘幅度", value=0.35, elem_id="redraw_amplitude")
+                    minimum=0.0, maximum=1.0, step=0.01, label="重绘幅度", value=0.35, elem_id="redraw_amplitude"
+                )
 
         with gr.Row():
             with gr.Column():
@@ -147,11 +146,11 @@ def on_ui_tabs():
                     value="开始", variant='primary', elem_id=f"{self_type}_start_btn", label='start_btn',
                 )
                 end_btn = gr.Button(
-                    value="终止", variant='secondary', elem_id=f"{self_type}_end_btn", label='end_btn', visible=True
+                    value="终止", variant='secondary', elem_id=f"{self_type}_end_btn", label='end_btn',
                 )
                 process_btn = gr.Button(
                     value="处理", variant='secondary', elem_id=f"{self_type}_process_btn", label='process_btn',
-                    visible=True
+                    visible=False
                 )
 
         bind_func(start_btn, end_btn)
@@ -161,4 +160,4 @@ def on_ui_tabs():
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
 
-# 执行过程中，把待升级的文件删掉了，要每次检测是否存在，提示与跳过
+# 执行过程中，把待升级的文件删掉了，要每次检测是否存在，提示与跳过 应该提示skip，并且修改curr的值
