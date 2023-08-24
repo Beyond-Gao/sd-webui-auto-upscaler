@@ -5,6 +5,8 @@ from modules import script_callbacks
 from modules.ui_components import FormRow
 from scripts.au_util import AuUtils
 from scripts.generate import LoopUpscaler
+from modules.scripts import scripts_txt2img
+import modules
 
 folder_symbol = '\U0001f4c2'  # 📂
 
@@ -16,6 +18,7 @@ def on_ui_tabs():
     def bind_func(
             submit, interrupt
     ):
+
         l = LoopUpscaler()
 
         submit.click(
@@ -23,6 +26,7 @@ def on_ui_tabs():
             _js="auFirstStart",
             inputs=[
                 id_task,
+                task_info,
                 input_floder,
                 output_floder,
                 select_upscaler,
@@ -30,7 +34,8 @@ def on_ui_tabs():
                 redraw_amplitude,
             ],
             outputs=[
-                id_task,  # 准备完成状态
+                id_task,
+                task_info,
                 process_count,
                 process_curr,
             ],
@@ -91,9 +96,6 @@ def on_ui_tabs():
                         html_log = gr.HTML(elem_id=f'html_log_{tabname}', elem_classes="html-log")
 
                         generation_info = gr.Textbox(visible=False, elem_id=f'generation_info_{tabname}')
-                        # if tabname == 'txt2img' or tabname == 'img2img':
-                        #     generation_info_button = gr.Button(visible=False,
-                        #                                        elem_id=f"{tabname}_generation_info_button")
 
                 else:
                     html_info_x = gr.HTML(elem_id=f'html_info_x_{tabname}')
@@ -106,6 +108,7 @@ def on_ui_tabs():
 
         with gr.Row(visible=False):
             id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="")
+            task_info = gr.Textbox(visible=True, elem_id=f"{self_type}_task_info", value="")
             process_count = gr.Number(
                 visible=True, elem_id=f"{self_type}_process_count", show_label=False, info="总任务数", value=0
             )
@@ -146,7 +149,7 @@ def on_ui_tabs():
                     value="开始", variant='primary', elem_id=f"{self_type}_start_btn", label='start_btn',
                 )
                 end_btn = gr.Button(
-                    value="终止", variant='secondary', elem_id=f"{self_type}_end_btn", label='end_btn',
+                    value="终止", variant='secondary', elem_id=f"{self_type}_end_btn", label='end_btn', visible=False
                 )
                 process_btn = gr.Button(
                     value="处理", variant='secondary', elem_id=f"{self_type}_process_btn", label='process_btn',
@@ -159,5 +162,3 @@ def on_ui_tabs():
 
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
-
-# 执行过程中，把待升级的文件删掉了，要每次检测是否存在，提示与跳过 应该提示skip，并且修改curr的值

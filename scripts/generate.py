@@ -3,12 +3,14 @@ import time
 from pathlib import Path
 from PIL import Image
 from contextlib import closing
+import gradio as gr
 
+from modules import ui
 from modules.shared import opts
 from modules import shared, progress
 from modules.ui import plaintext_to_html
 from modules.call_queue import queue_lock
-from modules.scripts import scripts_txt2img
+from modules import scripts
 from modules.images import read_info_from_image
 from modules.generation_parameters_copypaste import parse_generation_parameters
 from modules.processing import StableDiffusionProcessingTxt2Img, process_images
@@ -34,12 +36,40 @@ class LoopUpscaler:
         self.iter_images = None
         self.images_list = []
 
+    def init_default_script_args(self, script_runner):
+        # find max idx from the scripts in runner and generate a none array to init script_args
+        last_arg_index = 1
+        for script in script_runner.scripts:
+            if last_arg_index < script.args_to:
+                last_arg_index = script.args_to
+        # None everywhere except position 0 to initialize script args
+        script_args = [None] * last_arg_index
+        script_args[0] = 0
+
+        # get default values
+        with gr.Blocks():  # will throw errors calling ui function without this
+            for script in script_runner.scripts:
+                if script.ui(script.is_img2img):
+                    ui_default_values = []
+                    for elem in script.ui(script.is_img2img):
+                        ui_default_values.append(elem.value)
+                    script_args[script.args_from:script.args_to] = ui_default_values
+        return script_args
+
     def up(self, filepath):
+
+        script_runner = scripts.scripts_txt2img
+        if not script_runner.scripts:
+            script_runner.initialize_scripts(False)
+            ui.create_ui()
+
+        default_args = self.init_default_script_args(script_runner)
+        print(f'generate default_args: {default_args}\n')
 
         geninfo, _ = read_info_from_image(Image.open(filepath))
         geninfo = parse_generation_parameters(geninfo)
 
-        print(f'geninfo: {geninfo}')
+        # print(f'geninfo: {geninfo}')
 
         args = {
             "prompt": geninfo["Prompt"],  # 提示词
@@ -66,12 +96,13 @@ class LoopUpscaler:
 
             try:
                 with closing(StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)) as p:
-                    p.scripts = scripts_txt2img
+                    p.scripts = script_runner
                     p.outpath_samples = self.output_floder
                     p.outpath_grids = opts.outdir_txt2img_grids
 
                     shared.state.begin(job=self.id_task)
-                    p.script_args = ()
+                    # p.script_args = ()
+                    p.script_args = tuple(default_args)
                     processed = process_images(p)
                     progress.record_results(self.id_task, processed)
 
@@ -81,6 +112,7 @@ class LoopUpscaler:
                 shared.total_tqdm.clear()
 
         generation_info_js = processed.js()
+        print(f'generate.py generation_info_js: {generation_info_js}')
         self.outputs_info = [
             processed.images,
             generation_info_js,
@@ -88,7 +120,7 @@ class LoopUpscaler:
             plaintext_to_html(processed.comments, classname="comments"),
         ]
 
-    def fake_up(self):
+    def fake_up(self, show_log=""):
 
         progress.add_task_to_queue(self.id_task)
         with queue_lock:
@@ -100,7 +132,10 @@ class LoopUpscaler:
             shared.state.end()
             shared.total_tqdm.clear()
 
-        self.outputs_info = [None, "", "", ""]
+        if show_log != "":
+            show_log = plaintext_to_html(show_log, classname="comments")
+
+        self.outputs_info = [None, "", "", show_log]
 
     def interrupt(self):
         print("click: interrupt")
@@ -120,6 +155,8 @@ class LoopUpscaler:
             yield filepath
 
     def get_next_image(self):
+        if not self.iter_images:
+            return None
         try:
             return next(self.iter_images)
         except StopIteration:
@@ -137,12 +174,12 @@ class LoopUpscaler:
         print(f'path: {path}')
         if input_folder == "" or not path.is_dir():
             print("请输入正确的输入文件夹路径")
-            return 0
+            return "请输入正确的输入文件夹路径"
         out_path = Path(output_floder)
         print(f'out_path: {out_path}')
         if output_floder == "" or not out_path.is_dir():
             print("请输入正确的输出文件夹路径")
-            return 0
+            return "请输入正确的输出文件夹路径"
 
         self.input_folder = input_folder
         self.output_floder = output_floder
@@ -160,19 +197,17 @@ class LoopUpscaler:
 
         if len(self.images_list) <= 0:
             print("未找到有效的图片")
-            return 0
+            return "未找到有效的图片"
+
+        return "valid"
 
     def first_start(
-            self, id_task, input_folder, output_floder, select_upscaler, select_upscaler_visibility, redraw_amplitude
+            self, id_task, task_info, input_folder, output_floder, select_upscaler, select_upscaler_visibility,
+            redraw_amplitude
     ):
 
         if "repetitive" in id_task:
-            return id_task.replace("repetitive", ""), self.process_count, self.process_curr
-
-        if not input_folder:
-            input_folder = r"G:\sd\sd-webui-aki-v4.2\outputs\t\input"
-        if not output_floder:
-            output_floder = r"G:\sd\sd-webui-aki-v4.2\outputs\t\output"
+            return id_task.replace("repetitive", ""), task_info, self.process_count, self.process_curr
 
         self.images_list = []
         self.id_task = "Starting"
@@ -180,19 +215,23 @@ class LoopUpscaler:
         self.select_upscaler_visibility = select_upscaler_visibility
         self.redraw_amplitude = redraw_amplitude
 
-        self.validate_images_in_folder(input_folder, output_floder)
-
+        valid_result = self.validate_images_in_folder(input_folder, output_floder)
         self.process_curr = 0
         self.process_count = len(self.images_list)
 
-        if self.process_count > 0:
+        if valid_result != "valid":
+            self.id_task = "Stopping"
+            task_info = valid_result
+
+        elif self.process_count > 0:
             self.flag = True
             self.iter_images = self.iterImages()
+
         else:
             self.id_task = "Stopping"
 
         print(f'first_start return: {self.id_task, self.process_count, self.process_curr}')
-        return self.id_task, self.process_count, self.process_curr
+        return self.id_task, task_info, self.process_count, self.process_curr
 
     def loop_start(self, id_task, process_count, process_curr):
 
@@ -213,16 +252,17 @@ class LoopUpscaler:
         filepath = self.get_next_image()
         if not filepath:
             print("任务已完成。")
+            self.interrupt()
             self.id_task = "Stopping"
             self.process_count = 0
             return self.outputs_info + [self.id_task, self.process_count, 0]
 
         if not os.path.exists(filepath):
+            self.fake_up(show_log=f"Skip,not find file: {filepath}")
             return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
 
         print(f"({self.process_curr}/{self.process_count})开始处理图片...{filepath}")
         self.up(filepath)
-        # self.fake_up()
 
         # print(f'return: {self.outputs_info + [self.id_task, self.process_count, self.process_curr]}')
         return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
