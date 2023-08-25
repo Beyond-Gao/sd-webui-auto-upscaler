@@ -5,8 +5,6 @@ from modules import script_callbacks
 from modules.ui_components import FormRow
 from scripts.au_util import AuUtils
 from scripts.generate import LoopUpscaler
-from modules.scripts import scripts_txt2img
-import modules
 
 folder_symbol = '\U0001f4c2'  # 📂
 
@@ -26,7 +24,6 @@ def on_ui_tabs():
             _js="auFirstStart",
             inputs=[
                 id_task,
-                task_info,
                 input_floder,
                 output_floder,
                 select_upscaler,
@@ -35,9 +32,10 @@ def on_ui_tabs():
             ],
             outputs=[
                 id_task,
-                task_info,
                 process_count,
                 process_curr,
+                html_info,
+                html_log,
             ],
         )
 
@@ -107,8 +105,7 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False) as ui_component:
 
         with gr.Row(visible=False):
-            id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="")
-            task_info = gr.Textbox(visible=True, elem_id=f"{self_type}_task_info", value="")
+            id_task = gr.Textbox(visible=True, elem_id=f"{self_type}_id_task", value="", label="任务id")
             process_count = gr.Number(
                 visible=True, elem_id=f"{self_type}_process_count", show_label=False, info="总任务数", value=0
             )
@@ -118,8 +115,8 @@ def on_ui_tabs():
 
         with gr.Row():
             input_floder = gr.Textbox(
-                placeholder="待高清修复的图片目录",
-                label="输入目录"
+                placeholder="",
+                label="输入目录", autofocus=True,
             )
         with gr.Row():
             output_floder = gr.Textbox(

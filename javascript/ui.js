@@ -2,40 +2,28 @@
 function auFirstStart() {
 
     var idTaskEle = getEleIdTask();
-    var taskInfo = getEleTaskInfo();
     var showInfo = getEleShowInfoP();
     var res = create_submit_args(arguments);
 
-    if (idTaskEle.value == "" || idTaskEle.value == "Stopped") {
-
-    } else if (idTaskEle.value != "WaitStart" || idTaskEle.value != "Stopping") {
-        console.log("重复任务！")
+    if (idTaskEle.value != "" && idTaskEle.value != "Stopped") {
         res[0] = "repetitive" + idTaskEle.value;
         return res;
     }
 
-    setDisabled();
-    setStartBtnHidden();
-    setInterruptBtnVisible();
-    localStorage.setItem("auWaitstartCount", 0);
+    setProcessingStatus();
 
     idTaskEle.value = "WaitStart";
-    taskInfo.value = "normal";
     showInfo.textContent = "Waiting for start...";
 
+    clickProcessBtn();
+
     res[0] = idTaskEle.value;
-    res[1] = taskInfo.value;
-
-    var process_btn = getEleProcessBtn();
-    clickBtn(process_btn);
-
     return res;
 }
 
 function auLoopStart() {
 
     var idTaskEle = getEleIdTask();
-    var taskInfo = getEleTaskInfo();
     var showInfo = getEleShowInfoP();
     var processCurrEle = getEleProcessCurr();
     var processCountEle = getEleProcessCount();
@@ -44,50 +32,45 @@ function auLoopStart() {
     res[1] = processCountEle.value;
 
     if (idTaskEle.value == "WaitStart") {
-
-        var waitCount = localStorage.getItem("auWaitstartCount");
-
-        if (waitCount >= 3) {
-            setTimeout(function() {
-                var interruptBtn = gradioApp().getElementById('auto_upscaler_end_btn');
-                interruptBtn.click();
-            }, 3000);
-
-            res[0] = idTaskEle.value;
-            return res;
-
-        } else {
-            localStorage.setItem("auWaitstartCount", waitCount + 1);
-        }
-
+        idTaskEle.value = "WaitStart2";
         res[0] = idTaskEle.value;
-        var process_btn = getEleProcessBtn();
-        clickBtn(process_btn);
+        clickProcessBtn();
+        return res;
+
+    } else if (idTaskEle.value == "WaitStart2") {
+        idTaskEle.value = "Stopped";
+        res[0] = "Stopping";
+        showInfo.textContent = "任务启动失败，请重试。";
+        setFinishedStatus();
         return res;
 
     } else if (idTaskEle.value == "Stopping") {
-        res[0] = idTaskEle.value;
+        idTaskEle.value = "Stopped";
+        res[0] = "Stopping";
 
-        if (taskInfo.value != "normal") {
-            showInfo.textContent = taskInfo.value;
-            setStartBtnVisible();
-            setInterruptBtnHidden();
-
-        }else if (showInfo.textContent != "All Complete.") {
-            showInfo.textContent = "Stopped.";
+        var pLog = getEleHtmlLog();
+        if (pLog && pLog.textContent.startsWith("启动错误")) {
+            setFinishedStatus();
         }
+        showInfo.textContent = "Stopped.";
 
         return res;
 
     } else if (idTaskEle.value == "Stopped") {
         res[0] = "Stopping";
-        if (showInfo.textContent != "All Complete.") {
-            showInfo.textContent = "Stopped."
-        }
+        showInfo.textContent = "Stopped.";
+        return res;
+
+    } else if (idTaskEle.value == "Interrupt") {
+        idTaskEle.value = "Stopped";
+        res[0] = "Stopping";
+
+        showInfo.textContent = "Stopped.";
         return res;
     }
 
     var id = randomId();
+    idTaskEle.value == id;
 
     res[0] = id;
     res[2] += 1;
@@ -101,25 +84,24 @@ function auLoopStart() {
         var processCurrEle = getEleProcessCurr();
         var processCountEle = getEleProcessCount();
 
-        showInfo.textContent = "(" + res[2] + "/" + res[1] + ") " + "Complete.";
+        if (idTaskEle.value.startsWith("task(")) {
+            idTaskEle.value = "Stopped";
+        }
 
-        if (idTaskEle.value == "Stopping" || idTaskEle.value == "Stopped" || parseInt(processCurrEle.value) >= parseInt(processCountEle.value)) {
+        if (showInfo.textContent.includes("Stop")) {
+            showInfo.textContent = "Stopped.";
+            setFinishedStatus();
+            return;
+        }
 
-            if (showInfo.textContent != "Stopping...") {
-                showInfo.textContent = "All Complete.";
-            }
-
-            setStartBtnVisible();
-            setInterruptBtnHidden();
-
-            if (parseInt(processCurrEle.value) >= parseInt(processCountEle.value)) {
-                var interruptBtn = gradioApp().getElementById('auto_upscaler_end_btn');
-                interruptBtn.click();
-            }
-
+        if (parseInt(processCurrEle.value) == parseInt(processCountEle.value)) {
+            showInfo.textContent = "All Complete.";
+            var interruptBtn = gradioApp().getElementById('auto_upscaler_end_btn');
+            setFinishedStatus();
+            interruptBtn.click();
         } else {
-            var processBtn = getEleProcessBtn();
-            clickBtn(processBtn);
+            showInfo.textContent = "(" + res[2] + "/" + res[1] + ") " + "Complete.";
+            clickProcessBtn();
         }
 
     });
@@ -134,21 +116,20 @@ function auInterrupt() {
     var showInfo = getEleShowInfoP();
     var res = create_submit_args(arguments);
 
-    console.log("idTaskEle.value" + idTaskEle.value);
-    if (idTaskEle.value == "WaitStart" || idTaskEle.value == "Starting") {
-        idTaskEle.value = "WaitStart";
-        console.log("iiiiiii")
-        setInterruptBtnHidden();
-        setStartBtnVisible();
-        showInfo.textContent = "Stopped.";
+    if (idTaskEle.value == "Starting") {
+        idTaskEle.value = "Stopped";
     }
 
-    idTaskEle.value = "Stopping"
-    localStorage.setItem("auWaitstartCount", 0);
+    if (idTaskEle.value == "WaitStart" || idTaskEle.value == "WaitStart2") {
+        setFinishedStatus();
+        showInfo.textContent = "Stopped.";
+    } else if (showInfo.textContent == "All Complete.") {
 
-    if (showInfo.textContent != "All Complete." && showInfo.textContent != "Stopped.") {
+    } else {
         showInfo.textContent = "Stopping...";
     }
+
+    idTaskEle.value = "Stopped";
 
     return res;
 }
@@ -168,12 +149,15 @@ function getEleShowInfoP() {
     return p;
 }
 
-function getEleIdTask() {
-    return document.querySelector('#auto_upscaler_id_task textarea');
+function clickProcessBtn() {
+    setTimeout(function() {
+        var process_btn = getEleProcessBtn();
+        process_btn.click();
+    }, 3000)
 }
 
-function getEleTaskInfo() {
-    return document.querySelector('#auto_upscaler_task_info textarea');
+function getEleIdTask() {
+    return document.querySelector('#auto_upscaler_id_task textarea');
 }
 
 function getEleProcessBtn() {
@@ -188,10 +172,8 @@ function getEleProcessCount() {
     return document.querySelector('#auto_upscaler_process_count input');
 }
 
-function clickBtn(process_btn) {
-    setTimeout(function() {
-        process_btn.click();
-    }, 10000);
+function getEleHtmlLog() {
+    return document.querySelector('#html_log_auto_upscaler p')
 }
 
 function setStartBtnHidden() {
@@ -210,21 +192,42 @@ function setInterruptBtnVisible() {
     gradioApp().getElementById("auto_upscaler_end_btn").style.display = "block";
 }
 
-function setDisabled() {
+function setProcessingStatus() {
     startBtn = gradioApp().getElementById("auto_upscaler_start_btn");
     startBtn.disabled = true;
     startBtn.style.cursor = "pointer";
+    startBtn.style.display = "none";
 
     endBtn = gradioApp().getElementById("auto_upscaler_end_btn");
     endBtn.disabled = true;
     endBtn.style.cursor = "pointer";
+    endBtn.style.display = "block";
 
     setTimeout(function() {
         startBtn = gradioApp().getElementById("auto_upscaler_start_btn");
         endBtn = gradioApp().getElementById("auto_upscaler_end_btn");
         startBtn.disabled = false;
         endBtn.disabled = false;
-    }, 3500)
+    }, 3000)
+}
+
+function setFinishedStatus() {
+    startBtn = gradioApp().getElementById("auto_upscaler_start_btn");
+    startBtn.disabled = true;
+    startBtn.style.cursor = "pointer";
+    startBtn.style.display = "block";
+
+    endBtn = gradioApp().getElementById("auto_upscaler_end_btn");
+    endBtn.disabled = true;
+    endBtn.style.cursor = "pointer";
+    endBtn.style.display = "none";
+
+    setTimeout(function() {
+        startBtn = gradioApp().getElementById("auto_upscaler_start_btn");
+        endBtn = gradioApp().getElementById("auto_upscaler_end_btn");
+        startBtn.disabled = false;
+        endBtn.disabled = false;
+    }, 3000)
 }
 
 

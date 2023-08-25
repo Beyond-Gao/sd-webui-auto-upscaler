@@ -1,11 +1,11 @@
 import os
 import time
-from pathlib import Path
 from PIL import Image
+from pathlib import Path
 from contextlib import closing
+
 import gradio as gr
 
-from modules import ui
 from modules.shared import opts
 from modules import shared, progress
 from modules.ui import plaintext_to_html
@@ -27,49 +27,58 @@ class LoopUpscaler:
 
         self.flag = True
         self.id_task = "0"
-        self.img_geninfo_list = []
-        self.img_geninfo_num = 0
-        self.outputs_info = [None, None, None, None]
-
         self.process_count = 0
         self.process_curr = 0
         self.iter_images = None
         self.images_list = []
+        self.default_args = None
+        self.show_log = plaintext_to_html("", classname="comments")
+        self._init_data()
 
-    def init_default_script_args(self, script_runner):
-        # find max idx from the scripts in runner and generate a none array to init script_args
+    def _init_data(self):
+        self.reset_outputs_info()
+        self.script_runner = scripts.scripts_txt2img
+        self.init_default_script_args()
+
+    def init_default_script_args(self):
+        # if not self.script_runner.scripts:
+        #     self.script_runner.initialize_scripts(False)
+        #     ui.create_ui()
+
         last_arg_index = 1
-        for script in script_runner.scripts:
+        for script in self.script_runner.scripts:
             if last_arg_index < script.args_to:
                 last_arg_index = script.args_to
-        # None everywhere except position 0 to initialize script args
         script_args = [None] * last_arg_index
         script_args[0] = 0
 
-        # get default values
-        with gr.Blocks():  # will throw errors calling ui function without this
-            for script in script_runner.scripts:
-                if script.ui(script.is_img2img):
-                    ui_default_values = []
-                    for elem in script.ui(script.is_img2img):
-                        ui_default_values.append(elem.value)
-                    script_args[script.args_from:script.args_to] = ui_default_values
-        return script_args
+        with gr.Blocks(analytics_enabled=False):
+            with gr.Row(visible=False):
+                for script in self.script_runner.scripts:
+                    if script.ui(script.is_img2img):
+                        ui_default_values = []
+                        for elem in script.ui(script.is_img2img):
+                            ui_default_values.append(elem.value)
+                        script_args[script.args_from:script.args_to] = ui_default_values
+        self.default_args = script_args
+
+    def reset_outputs_info(self):
+        self.out_image = None
+        self.out_generation_info_js = ""
+        self.out_info = ""
+        self.out_comments = ""
+
+    def set_out_comments(self, out_comments=""):
+        self.out_comments = plaintext_to_html(out_comments, classname="comments")
+
+    @property
+    def outputs_info(self):
+        return self.out_image, self.out_generation_info_js, self.out_info, self.out_comments
 
     def up(self, filepath):
 
-        script_runner = scripts.scripts_txt2img
-        if not script_runner.scripts:
-            script_runner.initialize_scripts(False)
-            ui.create_ui()
-
-        default_args = self.init_default_script_args(script_runner)
-        print(f'generate default_args: {default_args}\n')
-
         geninfo, _ = read_info_from_image(Image.open(filepath))
         geninfo = parse_generation_parameters(geninfo)
-
-        # print(f'geninfo: {geninfo}')
 
         args = {
             "prompt": geninfo["Prompt"],  # 提示词
@@ -96,13 +105,12 @@ class LoopUpscaler:
 
             try:
                 with closing(StableDiffusionProcessingTxt2Img(sd_model=shared.sd_model, **args)) as p:
-                    p.scripts = script_runner
+                    p.scripts = self.script_runner
                     p.outpath_samples = self.output_floder
                     p.outpath_grids = opts.outdir_txt2img_grids
 
                     shared.state.begin(job=self.id_task)
-                    # p.script_args = ()
-                    p.script_args = tuple(default_args)
+                    p.script_args = tuple(self.default_args)
                     processed = process_images(p)
                     progress.record_results(self.id_task, processed)
 
@@ -112,15 +120,23 @@ class LoopUpscaler:
                 shared.total_tqdm.clear()
 
         generation_info_js = processed.js()
-        print(f'generate.py generation_info_js: {generation_info_js}')
-        self.outputs_info = [
-            processed.images,
-            generation_info_js,
-            plaintext_to_html(processed.info),
-            plaintext_to_html(processed.comments, classname="comments"),
-        ]
 
-    def fake_up(self, show_log=""):
+        self.out_image = processed.images
+        self.out_generation_info_js = generation_info_js
+        self.out_info = plaintext_to_html(processed.info)
+        self.out_comments = plaintext_to_html(processed.comments, classname="comments")
+
+    def interrupt(self):
+        self.flag = False
+        self.process_curr = 0
+        self.process_count = 0
+        # self.id_task = None
+        self.iter_images = None
+        self.images_list = []
+        shared.state.interrupt()
+        return "Stopped", self.process_count, self.process_curr
+
+    def fake_up(self):
 
         progress.add_task_to_queue(self.id_task)
         with queue_lock:
@@ -132,21 +148,9 @@ class LoopUpscaler:
             shared.state.end()
             shared.total_tqdm.clear()
 
-        if show_log != "":
-            show_log = plaintext_to_html(show_log, classname="comments")
-
-        self.outputs_info = [None, "", "", show_log]
-
-    def interrupt(self):
-        print("click: interrupt")
-        self.flag = False
-        self.process_curr = 0
-        self.process_count = 0
-        # self.id_task = None
-        self.iter_images = None
-        self.images_list = []
-        shared.state.interrupt()
-        return "Stopped", self.process_count, self.process_curr
+        self.out_image = None
+        self.out_generation_info_js = ""
+        self.out_info = ""
 
     def iterImages(self):
         for filepath in self.images_list:
@@ -171,14 +175,10 @@ class LoopUpscaler:
     def validate_images_in_folder(self, input_folder, output_floder):
 
         path = Path(input_folder)
-        print(f'path: {path}')
         if input_folder == "" or not path.is_dir():
-            print("请输入正确的输入文件夹路径")
             return "请输入正确的输入文件夹路径"
         out_path = Path(output_floder)
-        print(f'out_path: {out_path}')
         if output_floder == "" or not out_path.is_dir():
-            print("请输入正确的输出文件夹路径")
             return "请输入正确的输出文件夹路径"
 
         self.input_folder = input_folder
@@ -196,18 +196,17 @@ class LoopUpscaler:
             self.images_list.append(path.joinpath(filename))
 
         if len(self.images_list) <= 0:
-            print("未找到有效的图片")
             return "未找到有效的图片"
 
         return "valid"
 
     def first_start(
-            self, id_task, task_info, input_folder, output_floder, select_upscaler, select_upscaler_visibility,
-            redraw_amplitude
+            self, id_task, input_folder, output_floder, select_upscaler, select_upscaler_visibility, redraw_amplitude
     ):
 
         if "repetitive" in id_task:
-            return id_task.replace("repetitive", ""), task_info, self.process_count, self.process_curr
+            return id_task.replace("repetitive",
+                                   ""), self.process_count, self.process_curr, self.out_info, self.out_comments
 
         self.images_list = []
         self.id_task = "Starting"
@@ -221,17 +220,19 @@ class LoopUpscaler:
 
         if valid_result != "valid":
             self.id_task = "Stopping"
-            task_info = valid_result
+            self.set_out_comments(f'启动错误: {valid_result}')
 
         elif self.process_count > 0:
             self.flag = True
+            self.reset_outputs_info()
             self.iter_images = self.iterImages()
 
         else:
             self.id_task = "Stopping"
 
-        print(f'first_start return: {self.id_task, self.process_count, self.process_curr}')
-        return self.id_task, task_info, self.process_count, self.process_curr
+        print(
+            f'first_start return: {self.id_task, self.process_count, self.process_curr, self.out_info, self.out_comments}')
+        return self.id_task, self.process_count, self.process_curr, self.out_info, self.out_comments
 
     def loop_start(self, id_task, process_count, process_curr):
 
@@ -242,11 +243,11 @@ class LoopUpscaler:
 
         if id_task == "WaitStart":
             print("等待任务开始")
-            return self.outputs_info + [id_task, self.process_count, 0]
+            return *self.outputs_info, "WaitStart2", self.process_count, 0
 
         if id_task == "Stopping":
             print("结束任务！")
-            return self.outputs_info + ["Stopped", self.process_count, 0]
+            return *self.outputs_info, "Stopped", self.process_count, 0
 
         self.id_task = id_task
         filepath = self.get_next_image()
@@ -255,14 +256,14 @@ class LoopUpscaler:
             self.interrupt()
             self.id_task = "Stopping"
             self.process_count = 0
-            return self.outputs_info + [self.id_task, self.process_count, 0]
+            return *self.outputs_info, self.id_task, self.process_count, 0
 
         if not os.path.exists(filepath):
-            self.fake_up(show_log=f"Skip,not find file: {filepath}")
-            return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
+            self.fake_up()
+            self.set_out_comments(f"Skip, not find file: {filepath}")
+            return *self.outputs_info, self.id_task, self.process_count, self.process_curr
 
         print(f"({self.process_curr}/{self.process_count})开始处理图片...{filepath}")
         self.up(filepath)
 
-        # print(f'return: {self.outputs_info + [self.id_task, self.process_count, self.process_curr]}')
-        return self.outputs_info + [self.id_task, self.process_count, self.process_curr]
+        return *self.outputs_info, self.id_task, self.process_count, self.process_curr
