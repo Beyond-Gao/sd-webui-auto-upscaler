@@ -205,8 +205,7 @@ class LoopUpscaler:
     ):
 
         if "repetitive" in id_task:
-            return id_task.replace("repetitive",
-                                   ""), self.process_count, self.process_curr, self.out_info, self.out_comments
+            return id_task.replace("repetitive", ""), self.process_count, self.process_curr, self.out_info, self.out_comments
 
         self.images_list = []
         self.id_task = "Starting"
@@ -230,8 +229,6 @@ class LoopUpscaler:
         else:
             self.id_task = "Stopping"
 
-        print(
-            f'first_start return: {self.id_task, self.process_count, self.process_curr, self.out_info, self.out_comments}')
         return self.id_task, self.process_count, self.process_curr, self.out_info, self.out_comments
 
     def loop_start(self, id_task, process_count, process_curr):
@@ -239,20 +236,15 @@ class LoopUpscaler:
         self.process_count = int(process_count)
         self.process_curr = int(process_curr)
 
-        print(f'loop_start: {id_task}  {self.process_count}  {self.process_curr} {time.time()}')
-
         if id_task == "WaitStart":
-            print("等待任务开始")
             return *self.outputs_info, "WaitStart2", self.process_count, 0
 
         if id_task == "Stopping":
-            print("结束任务！")
             return *self.outputs_info, "Stopped", self.process_count, 0
 
         self.id_task = id_task
         filepath = self.get_next_image()
         if not filepath:
-            print("任务已完成。")
             self.interrupt()
             self.id_task = "Stopping"
             self.process_count = 0
@@ -263,7 +255,7 @@ class LoopUpscaler:
             self.set_out_comments(f"Skip, not find file: {filepath}")
             return *self.outputs_info, self.id_task, self.process_count, self.process_curr
 
-        print(f"({self.process_curr}/{self.process_count})开始处理图片...{filepath}")
+        # print(f"({self.process_curr}/{self.process_count})开始处理图片...{filepath}")
         self.up(filepath)
 
         return *self.outputs_info, self.id_task, self.process_count, self.process_curr

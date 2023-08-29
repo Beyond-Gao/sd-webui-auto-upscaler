@@ -85,22 +85,24 @@ function auLoopStart() {
         var processCountEle = getEleProcessCount();
 
         if (showInfo.textContent.includes("Stop")) {
+            showInfo.textContent = "Stopped.";
             if (idTaskEle.value.startsWith("task(")) {
                 idTaskEle.value = "Stopped";
             }
-            showInfo.textContent = "Stopped.";
             setFinishedStatus();
+            clickImgBtn();
             return;
         }
 
         if (parseInt(processCurrEle.value) == parseInt(processCountEle.value)) {
+            showInfo.textContent = "All Complete.";
             if (idTaskEle.value.startsWith("task(")) {
                 idTaskEle.value = "Stopped";
             }
-            showInfo.textContent = "All Complete.";
             var interruptBtn = gradioApp().getElementById('auto_upscaler_end_btn');
-            setFinishedStatus();
             interruptBtn.click();
+            setFinishedStatus();
+            clickImgBtn();
         } else {
             showInfo.textContent = "(" + res[2] + "/" + res[1] + ") " + "Complete.";
             clickProcessBtn();
@@ -210,7 +212,7 @@ function setProcessingStatus() {
         endBtn = gradioApp().getElementById("auto_upscaler_end_btn");
         startBtn.disabled = false;
         endBtn.disabled = false;
-    }, 3000)
+    }, 3500)
 }
 
 function setFinishedStatus() {
@@ -230,6 +232,13 @@ function setFinishedStatus() {
         startBtn.disabled = false;
         endBtn.disabled = false;
     }, 3000)
+}
+
+function clickImgBtn() {
+    var btns = document.getElementById('auto_upscaler_gallery').querySelectorAll('button');
+    if (btns.length >= 1) {
+        btns[0].click();
+    }
 }
 
 
