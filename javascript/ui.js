@@ -84,17 +84,19 @@ function auLoopStart() {
         var processCurrEle = getEleProcessCurr();
         var processCountEle = getEleProcessCount();
 
-        if (idTaskEle.value.startsWith("task(")) {
-            idTaskEle.value = "Stopped";
-        }
-
         if (showInfo.textContent.includes("Stop")) {
+            if (idTaskEle.value.startsWith("task(")) {
+                idTaskEle.value = "Stopped";
+            }
             showInfo.textContent = "Stopped.";
             setFinishedStatus();
             return;
         }
 
         if (parseInt(processCurrEle.value) == parseInt(processCountEle.value)) {
+            if (idTaskEle.value.startsWith("task(")) {
+                idTaskEle.value = "Stopped";
+            }
             showInfo.textContent = "All Complete.";
             var interruptBtn = gradioApp().getElementById('auto_upscaler_end_btn');
             setFinishedStatus();
